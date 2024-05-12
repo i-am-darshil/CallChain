@@ -1,0 +1,68 @@
+file = {
+    SOI ~
+    (task_declaration ~ NEWLINE*)* ~
+    EOI
+}
+
+
+task_declaration = { "BEGIN" ~ "TASK" ~ task_name ~ (NEWLINE)* ~ task_body ~ "END" ~ "TASK" }
+
+task_body = {
+    depends_on_command? ~ (NEWLINE)* ~ 
+    select_command ~ (NEWLINE)* ~ 
+    use_command ~ (NEWLINE)* ~ 
+    properties_command ~ (NEWLINE)* ~ 
+    method_params_command? ~ (NEWLINE)*
+}
+
+select_command = {
+    "SELECT" ~ chain_name ~ "AS" ~ "CHAIN"
+}
+
+use_command = {
+    "USE" ~ method_name ~ "AS" ~ "METHOD"
+}
+
+properties_command = {
+    "BEGIN" ~ "PROPERTIES" ~ (NEWLINE)* ~ (property_declaration ~ (property_declaration)*)? ~ "END" ~ "PROPERTIES"
+}
+
+property_declaration = {
+    "SET" ~ property_name ~ "AS" ~ property_value ~ (NEWLINE)*
+}
+
+method_params_command = {
+    "BEGIN" ~ "METHOD_PARAMS" ~ (NEWLINE)* ~ (method_param_declaration ~ (method_param_declaration)*)? ~ "END" ~ "METHOD_PARAMS"
+}
+
+method_param_declaration = {
+    method_param_name ~ "IS" ~ method_param_type ~ "WITH" ~ ("VALUE") ~ (method_param_value ~ (method_param_value)*) ~ (NEWLINE)*
+}
+
+depends_on_command = {
+    "DEPENDS" ~ "ON" ~ ("TASK") ~ (task_name ~ (task_name)*)
+}
+
+task_name = { ASCII_WORD }
+
+chain_name = { ASCII_WORD }
+
+method_name = { ASCII_WORD }
+
+property_name = { ASCII_WORD }
+
+property_value = { ASCII_WORD }
+
+method_param_name = { ASCII_WORD }
+
+method_param_type = { ASCII_WORD }
+
+method_param_value = { ASCII_WORD }
+
+ASCII_WORD = @{ ASCII_CHAR+ }
+
+ASCII_CHAR = { ASCII_ALPHANUMERIC | "." | "_" | "/" | "-" } 
+
+WHITESPACE = _{ " " | "\t" }
+
+
