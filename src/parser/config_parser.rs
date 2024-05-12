@@ -1,10 +1,9 @@
+use config_structs::*;
 use pest::Parser;
 use pest_derive::Parser;
-
+use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::fs;
-
-use config_structs::*;
 
 pub mod config_structs {
     use std::collections::HashMap;
@@ -14,26 +13,7 @@ pub mod config_structs {
         pub chain_name: String,
         pub method_name: String,
         pub properties_map: HashMap<String, String>,
-        pub method_params: MethodParams,
-    }
-
-    #[derive(Debug, Clone)]
-    pub struct MethodParams {
-        pub string_params_map: HashMap<String, String>,
-        pub num_params_map: HashMap<String, u128>,
-        pub string_vec_params_map: HashMap<String, Vec<String>>,
-        pub num_vec_params_map: HashMap<String, Vec<u128>>,
-    }
-
-    impl MethodParams {
-        pub fn empty() -> MethodParams {
-            MethodParams {
-                string_params_map: HashMap::new(),
-                num_params_map: HashMap::new(),
-                string_vec_params_map: HashMap::new(),
-                num_vec_params_map: HashMap::new(),
-            }
-        }
+        pub method_params_json_string: String,
     }
 }
 
@@ -55,12 +35,16 @@ pub fn parse() -> (
         .next()
         .unwrap(); // get and unwrap the `file` rule; never fails
 
+    let mut method_params_all_map: HashMap<String, Value> = HashMap::new();
+    method_params_all_map.insert(String::from("id"), json!(1));
+    method_params_all_map.insert(String::from("jsonrpc"), json!(String::from("2.0")));
+
     for task_declaration in file.into_inner() {
         let mut current_task_name = String::from("");
         let mut chain_name = String::from("");
         let mut method_name = String::from("");
         let mut properties_map: HashMap<String, String> = HashMap::new();
-        let mut method_params = MethodParams::empty();
+        let mut method_params_json_string = String::new();
         let task_declaration_inners = task_declaration.into_inner();
 
         for task_declaration_inner in task_declaration_inners {
@@ -107,10 +91,13 @@ pub fn parse() -> (
                                 method_name = String::from(
                                     task_body_inner.into_inner().next().unwrap().as_str(),
                                 );
+                                method_params_all_map
+                                    .insert(String::from("method"), json!(method_name));
                                 println!("method_name: {}", method_name);
                             }
                             Rule::properties_command => {
                                 let property_declarations = task_body_inner.into_inner();
+
                                 for property_declaration in property_declarations {
                                     let mut property_declaration_inner =
                                         property_declaration.into_inner();
@@ -129,89 +116,178 @@ pub fn parse() -> (
                                 }
                             }
                             Rule::method_params_command => {
-                                let mut string_params_map: HashMap<String, String> = HashMap::new();
-                                let mut num_params_map: HashMap<String, u128> = HashMap::new();
-                                let mut string_vec_params_map: HashMap<String, Vec<String>> =
-                                    HashMap::new();
-                                let mut num_vec_params_map: HashMap<String, Vec<u128>> =
-                                    HashMap::new();
+                                let mut method_params_list: Vec<Value> = Vec::new();
 
-                                let method_param_declarations = task_body_inner.into_inner();
+                                let mut method_param_declarations = task_body_inner.into_inner();
+                                let entire_method_params_type = String::from(
+                                    method_param_declarations.next().unwrap().as_str(),
+                                )
+                                .to_lowercase();
+
                                 for method_param_declaration in method_param_declarations {
-                                    let mut method_param_declaration_inner =
+                                    let method_param_declaration_inner =
                                         method_param_declaration.into_inner();
-                                    let method_param_name = String::from(
-                                        method_param_declaration_inner.next().unwrap().as_str(),
-                                    )
-                                    .clone();
-                                    println!("method_param_name: {}", method_param_name);
 
-                                    let method_param_type =
-                                        method_param_declaration_inner.next().unwrap().as_str();
-                                    println!("method_param_type: {}", method_param_type);
+                                    for method_param_type_declaration in
+                                        method_param_declaration_inner
+                                    {
+                                        match method_param_type_declaration.as_rule() {
+                                            Rule::method_param_is_object_declaration => {
+                                                let mut param_obj_map: HashMap<String, Value> =
+                                                    HashMap::new();
+                                                let method_param_is_object_declarations =
+                                                    method_param_type_declaration.into_inner();
+                                                for method_param_is_object_declaration in
+                                                    method_param_is_object_declarations
+                                                {
+                                                    let mut method_param_inside_object_declaration =
+                                                        method_param_is_object_declaration
+                                                            .into_inner();
+                                                    let param_name = String::from(
+                                                        method_param_inside_object_declaration
+                                                            .next()
+                                                            .unwrap()
+                                                            .as_str(),
+                                                    );
 
-                                    if method_param_type == "list_of_string" {
-                                        let mut param_value_vec: Vec<String> = Vec::new();
-                                        for method_param_value_rule in
-                                            method_param_declaration_inner
-                                        {
-                                            let method_param_value =
-                                                String::from(method_param_value_rule.as_str());
+                                                    let param_type = String::from(
+                                                        method_param_inside_object_declaration
+                                                            .next()
+                                                            .unwrap()
+                                                            .as_str(),
+                                                    )
+                                                    .to_lowercase();
 
-                                            param_value_vec.push(method_param_value.clone());
+                                                    if param_type == "string" {
+                                                        let param_value = String::from(
+                                                            method_param_inside_object_declaration
+                                                                .next()
+                                                                .unwrap()
+                                                                .as_str(),
+                                                        );
+
+                                                        param_obj_map.insert(
+                                                            param_name.clone(),
+                                                            json!(param_value),
+                                                        );
+                                                    } else if param_type == "number" {
+                                                        let param_value =
+                                                            method_param_inside_object_declaration
+                                                                .next()
+                                                                .unwrap()
+                                                                .as_str()
+                                                                .parse::<i64>()
+                                                                .unwrap();
+
+                                                        param_obj_map.insert(
+                                                            param_name.clone(),
+                                                            json!(param_value),
+                                                        );
+                                                    } else if param_type == "list_of_string" {
+                                                        let mut method_object_params_list: Vec<
+                                                            Value,
+                                                        > = Vec::new();
+                                                        for method_param_value in
+                                                            method_param_inside_object_declaration
+                                                        {
+                                                            let param_value = String::from(
+                                                                method_param_value.as_str(),
+                                                            );
+                                                            method_object_params_list
+                                                                .push(json!(param_value));
+                                                        }
+
+                                                        param_obj_map.insert(
+                                                            param_name.clone(),
+                                                            json!(method_object_params_list),
+                                                        );
+                                                    } else if param_type == "list_of_number" {
+                                                        let mut method_object_params_list: Vec<
+                                                            Value,
+                                                        > = Vec::new();
+                                                        for method_param_value in
+                                                            method_param_inside_object_declaration
+                                                        {
+                                                            let param_value = method_param_value
+                                                                .as_str()
+                                                                .parse::<i64>()
+                                                                .unwrap();
+                                                            method_object_params_list
+                                                                .push(json!(param_value));
+                                                        }
+                                                        param_obj_map.insert(
+                                                            param_name.clone(),
+                                                            json!(method_object_params_list),
+                                                        );
+                                                    }
+                                                }
+                                                method_params_list.push(json!(param_obj_map));
+                                            }
+                                            Rule::method_param_is_non_object_declaration => {
+                                                let mut method_param_is_non_object_declaration =
+                                                    method_param_type_declaration.into_inner();
+
+                                                let param_type = String::from(
+                                                    method_param_is_non_object_declaration
+                                                        .next()
+                                                        .unwrap()
+                                                        .as_str(),
+                                                )
+                                                .to_lowercase();
+
+                                                if param_type == "string" {
+                                                    let param_value = String::from(
+                                                        method_param_is_non_object_declaration
+                                                            .next()
+                                                            .unwrap()
+                                                            .as_str(),
+                                                    );
+                                                    method_params_list.push(json!(param_value));
+                                                } else if param_type == "number" {
+                                                    let param_value =
+                                                        method_param_is_non_object_declaration
+                                                            .next()
+                                                            .unwrap()
+                                                            .as_str()
+                                                            .parse::<i64>()
+                                                            .unwrap();
+                                                    method_params_list.push(json!(param_value));
+                                                } else if param_type == "boolean" {
+                                                    let param_value =
+                                                        method_param_is_non_object_declaration
+                                                            .next()
+                                                            .unwrap()
+                                                            .as_str()
+                                                            .parse::<bool>()
+                                                            .unwrap();
+                                                    method_params_list.push(json!(param_value));
+                                                }
+                                            }
+                                            Rule::EOI => (),
+                                            _ => unreachable!(),
                                         }
-                                        println!(
-                                            "method_param_value in list of str: {:?}",
-                                            param_value_vec
-                                        );
-                                        string_vec_params_map
-                                            .insert(method_param_name, param_value_vec);
-                                    } else if method_param_type == "list_of_number" {
-                                        let mut param_value_vec: Vec<u128> = Vec::new();
-                                        for method_param_value_rule in
-                                            method_param_declaration_inner
-                                        {
-                                            let method_param_value = method_param_value_rule
-                                                .as_str()
-                                                .parse::<u128>()
-                                                .unwrap();
-                                            param_value_vec.push(method_param_value);
-                                        }
-                                        println!(
-                                            "method_param_value in list of u128: {:?}",
-                                            param_value_vec
-                                        );
-                                        num_vec_params_map
-                                            .insert(method_param_name, param_value_vec);
-                                    } else if method_param_type == "string" {
-                                        let method_param_value = String::from(
-                                            method_param_declaration_inner.next().unwrap().as_str(),
-                                        );
-                                        println!(
-                                            "method_param_value in str: {}",
-                                            method_param_value
-                                        );
-                                        string_params_map
-                                            .insert(method_param_name, method_param_value.clone());
-                                    } else if method_param_type == "number" {
-                                        let method_param_value =
-                                            method_param_declaration_inner.next().unwrap().as_str();
-                                        println!(
-                                            "method_param_value in u128: {}",
-                                            method_param_value
-                                        );
-                                        num_params_map.insert(
-                                            method_param_name,
-                                            method_param_value.parse::<u128>().unwrap(),
+                                    }
+                                }
+
+                                if entire_method_params_type == "list" {
+                                    method_params_all_map
+                                        .insert(String::from("params"), json!(method_params_list));
+                                } else {
+                                    if method_params_list.len() > 0 {
+                                        method_params_all_map.insert(
+                                            String::from("params"),
+                                            json!(method_params_list[0]),
                                         );
                                     }
                                 }
-                                method_params = MethodParams {
-                                    string_params_map: string_params_map,
-                                    num_params_map: num_params_map,
-                                    string_vec_params_map: string_vec_params_map,
-                                    num_vec_params_map: num_vec_params_map,
-                                }
+
+                                method_params_json_string =
+                                    serde_json::to_string(&method_params_all_map).unwrap();
+
+                                println!(
+                                    "method_params_list: {:?}, method_params_json_string: {:?}",
+                                    method_params_list, method_params_json_string
+                                );
                             }
                             Rule::EOI => (),
                             _ => unreachable!(),
@@ -229,13 +305,10 @@ pub fn parse() -> (
                 chain_name: chain_name.clone(),
                 method_name: method_name.clone(),
                 properties_map: properties_map,
-                method_params: method_params,
+                method_params_json_string: method_params_json_string,
             },
         );
     }
-
-    // println!("task_dependencies_map: {:?}", task_dependencies_map);
-    // println!("task_properties_map: {:?}", task_properties_map);
 
     return (
         Box::new(task_properties_map),

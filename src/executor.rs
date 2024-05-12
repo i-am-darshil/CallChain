@@ -78,7 +78,6 @@ pub fn execute(
                 let num_tasks_executed_arc_clone = Arc::clone(&num_tasks_executed_arc);
 
                 pool.execute(move || {
-                    thread::sleep(Duration::from_secs(3));
                     println!("Executing task: {}", task.clone());
                     let t = task::Task::new(
                         task.clone(),

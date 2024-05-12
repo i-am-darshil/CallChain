@@ -1,7 +1,5 @@
 use crate::parser::config_parser;
-use bytes::Bytes;
-use futures_core::stream::Stream;
-use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, CONTENT_TYPE};
+use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION, CONTENT_TYPE};
 use reqwest::Client;
 use serde_json::{from_str, Value};
 use std::collections::HashMap;
@@ -21,7 +19,7 @@ impl<'a> Task<'a> {
     pub fn execute(&self) {
         let result: Result<(), ()> = tokio::runtime::Runtime::new().unwrap().block_on(async {
             let api_response_string = self
-                .make_http_request(String::from("url"))
+                .make_http_request()
                 .await
                 .expect(format!("Failed to make HTTP request for task: {}", self.name).as_str());
 
@@ -32,21 +30,34 @@ impl<'a> Task<'a> {
         });
     }
 
-    async fn make_http_request(
-        &self,
-        url: String,
-        // content_type: String,
-        // auth_token: String,
-    ) -> Result<(String), Box<dyn std::error::Error>> {
+    async fn make_http_request(&self) -> Result<String, Box<dyn std::error::Error>> {
         // Create headers
         let mut headers = HeaderMap::new();
         headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
-        headers.insert(AUTHORIZATION, HeaderValue::from_static("Bearer <key>"));
+        // headers.insert(ACCEPT, HeaderValue::from_static("application/json"));
+        if self.task_params.chain_name == "eth-mainnet" {
+            headers.insert(
+                AUTHORIZATION,
+                HeaderValue::from_static("Bearer eth-mainnet-api-token"),
+            );
+        } else if self.task_params.chain_name == "solana-mainnet" {
+            headers.insert(
+                AUTHORIZATION,
+                HeaderValue::from_static("Bearer solana-mainnet-api-token"),
+            );
+        }
 
         // Create a reqwest Client
         let client = Client::new();
 
-        let resp = client.get("https://dummyjson.com/posts/2").send().await?;
+        let url = format!("https://{}.g.alchemy.com/v2/", self.task_params.chain_name);
+        let resp = client
+            .post(url)
+            .headers(headers)
+            .body(self.task_params.method_params_json_string.clone())
+            .send()
+            .await?;
+
         let resp_string = resp.text().await.unwrap();
         let deserialized_map: HashMap<String, Value> = from_str(resp_string.clone().as_str())?;
 
@@ -55,15 +66,7 @@ impl<'a> Task<'a> {
             self.name, resp_string, deserialized_map
         );
 
-        // Make an HTTP GET request and return the response stream
-        // let response = client.post(url).headers(headers).send().await?;
-        // .error_for_status()?;
-        // .bytes_stream();
-        // println!("response: {:?}", response);
-        // response.json()
         Ok(resp_string)
-
-        // Ok(response)
     }
 
     async fn store_response(&self, text: String) -> Result<(), Box<dyn std::error::Error>> {
@@ -71,7 +74,6 @@ impl<'a> Task<'a> {
         // Store the response locally
         let mut file = File::create(path.clone())?;
 
-        // println!("file metadata: {:?}", file.metadata());
         file.write_all(text.as_bytes())?;
         println!("Response stored locally into {}", path);
 

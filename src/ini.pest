@@ -32,11 +32,23 @@ property_declaration = {
 }
 
 method_params_command = {
-    "BEGIN" ~ "METHOD_PARAMS" ~ (NEWLINE)* ~ (method_param_declaration ~ (method_param_declaration)*)? ~ "END" ~ "METHOD_PARAMS"
+    "BEGIN" ~ "METHOD_PARAMS" ~ "IS" ~ entire_method_param_type ~ (NEWLINE)* ~ (method_param_declaration ~ (method_param_declaration)*)? ~ "END" ~ "METHOD_PARAMS"
 }
 
 method_param_declaration = {
-    method_param_name ~ "IS" ~ method_param_type ~ "WITH" ~ ("VALUE") ~ (method_param_value ~ (method_param_value)*) ~ (NEWLINE)*
+    (method_param_is_object_declaration | method_param_is_non_object_declaration) ~ (NEWLINE)*
+}
+
+method_param_is_object_declaration = {
+  "PARAM" ~ "IS" ~ "object" ~ "BEGIN" ~ (NEWLINE)* ~ (method_param_inside_object_declaration ~ (method_param_inside_object_declaration)*)? ~ (NEWLINE)* ~ "PARAM" ~ "END"
+}
+
+method_param_inside_object_declaration = {
+  method_param_name ~ "IS" ~ method_param_type ~ "WITH" ~ "VALUE" ~ (method_param_value ~ (method_param_value)*) ~ (NEWLINE)*
+}
+
+method_param_is_non_object_declaration = {
+  "PARAM" ~ "IS" ~ method_param_type ~ "WITH" ~ "VALUE" ~ method_param_value ~ (NEWLINE)*
 }
 
 depends_on_command = {
@@ -52,6 +64,8 @@ method_name = { ASCII_WORD }
 property_name = { ASCII_WORD }
 
 property_value = { ASCII_WORD }
+
+entire_method_param_type = { ASCII_WORD }
 
 method_param_name = { ASCII_WORD }
 
